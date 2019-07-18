@@ -136,11 +136,9 @@ async function validateTextDocument(textDocument: TextDocument): Promise<void> {
     const configuration = await getDocumentConfig(textDocument.uri);
     const lintLanguages = new Set(configuration.lintLanguages);
 
-
     if (!lintLanguages.has(textDocument.languageId)) {
         return;
     }
-
 
     const folders = workspaceFolders ? workspaceFolders : [];
 
@@ -175,7 +173,7 @@ async function validateTextDocument(textDocument: TextDocument): Promise<void> {
                 }
                 connection.sendDiagnostics(diagnosticsParam);
 
-                // if mainFilePath != textDocument.uri and textDocument.uri not i diagnostics, send empty
+                // if mainFilePath != textDocument.uri and textDocument.uri not in diagnostics, send empty
                 // for textDocument.uri
                 if (doc.uri !== textDocument.uri) {
                     if (!(Uri.parse(textDocument.uri).fsPath in diagnostics)) {
