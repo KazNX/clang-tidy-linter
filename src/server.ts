@@ -26,7 +26,8 @@ const defaultConfig: Configuration = {
     lintLanguages: ["c", "cpp"],
     extraCompilerArgs: ["-Weverything"],
     headerFilter: ".*",
-    args: []
+    args: [],
+    automaticCompileCommands: false
 };
 
 let globalConfig = defaultConfig;
@@ -142,54 +143,47 @@ async function validateTextDocument(textDocument: TextDocument): Promise<void> {
 
     const folders = workspaceFolders ? workspaceFolders : [];
 
-    let allowRecursion: boolean = true;
+    // Lookup an 'alternative file' to process. This is so we don't process headers with the wrong settings.
+    let referenceDoc: TextDocument|undefined = textDocument;
+    if (configuration.automaticCompileCommands) {
+        referenceDoc = getAlternativeDoc(Uri.parse(textDocument.uri).fsPath, textDocument.languageId);
+        console.warn("Alternative: " + (referenceDoc ? referenceDoc.uri : ""));
+
+        if (!referenceDoc) {
+            return;
+        }
+    }
+
     const processResults = (doc: TextDocument, diagnostics: { [id: string]: Diagnostic[] },
         diagnosticsCount: number) => {
         const mainFilePath: string = Uri.parse(textDocument.uri).fsPath;
-        let sentDiagnostics: boolean = false;
-
-        if (diagnosticsCount === 0 && allowRecursion) {
-            // No diagnostics. Could be because of the build database issue.
-            // Recurse on the best alternative file.
-            allowRecursion = false;
-            const referenceDoc = getAlternativeDoc(mainFilePath, textDocument.languageId);
-            // console.warn("No diagnostics for " + mainFilePath);
-            // console.warn("Alternative: " + (referenceDoc ? referenceDoc.uri : ""));
-            if (referenceDoc) {
-                sentDiagnostics = true;
-                generateDiagnostics(connection, referenceDoc, configuration, folders, processResults);
+        for (const filePath in diagnostics) {
+            const diagnosticsParam: PublishDiagnosticsParams = {
+                uri: "file://" + filePath,
+                diagnostics: diagnostics[filePath]
+            };
+            // Cache associated files.
+            if (filePath !== mainFilePath) {
+                fileAssociationMap[filePath] = mainFilePath;
             }
-        }
+            connection.sendDiagnostics(diagnosticsParam);
 
-        if (!sentDiagnostics) {
-            for (const filePath in diagnostics) {
-                const diagnosticsParam: PublishDiagnosticsParams = {
-                    uri: "file://" + filePath,
-                    diagnostics: diagnostics[filePath]
-                };
-                // Cache associated files.
-                if (filePath !== mainFilePath) {
-                    fileAssociationMap[filePath] = mainFilePath;
-                }
-                connection.sendDiagnostics(diagnosticsParam);
-
-                // if mainFilePath != textDocument.uri and textDocument.uri not in diagnostics, send empty
-                // for textDocument.uri
-                if (doc.uri !== textDocument.uri) {
-                    if (!(Uri.parse(textDocument.uri).fsPath in diagnostics)) {
-                        const diagnosticsParam: PublishDiagnosticsParams = {
-                            uri: textDocument.uri,
-                            diagnostics: []
-                        };
-                        connection.sendDiagnostics(diagnosticsParam);
-                    }
+            // if mainFilePath != textDocument.uri and textDocument.uri not in diagnostics, send empty
+            // for textDocument.uri
+            if (doc.uri !== textDocument.uri) {
+                if (!(Uri.parse(textDocument.uri).fsPath in diagnostics)) {
+                    const diagnosticsParam: PublishDiagnosticsParams = {
+                        uri: textDocument.uri,
+                        diagnostics: []
+                    };
+                    connection.sendDiagnostics(diagnosticsParam);
                 }
             }
         }
     };
 
 
-    generateDiagnostics(connection, textDocument, configuration, folders, processResults);
+    generateDiagnostics(connection, referenceDoc, configuration, folders, processResults);
 }
 
 async function provideCodeActions(params: CodeActionParams): Promise<CodeAction[]> {

@@ -82,6 +82,11 @@
                     },
                     "default": [],
                     "description": "Additional arguments to pass to clang-tidy"
+                },
+                "clangTidy.automaticCompileCommands": {
+                    "type": "boolean",
+                    "default": "false",
+                    "description": "Automatically attempt to resolve compile_commands.json for each processed file? Changes the behaviour."
                 }
             }
         }
